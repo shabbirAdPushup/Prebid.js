@@ -24,5 +24,8 @@
   "vidoomyBidAdapter",
   "nextMillenniumBidAdapter",
   "conversantBidAdapter",
-  "mediafuseBidAdapter"
+  "mediafuseBidAdapter",
+  "priceFloors",
+  "currency",
+  "pubxaiAnalyticsAdapter"
 ]
