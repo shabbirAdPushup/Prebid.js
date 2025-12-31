@@ -1,18 +1,22 @@
-import { getSignals as getSignalsFn, getSegments as getSegmentsFn, taxonomies } from '../libraries/gptUtils/gptUtils.js';
-import { auctionManager } from '../src/auctionManager.js';
-import { config } from '../src/config.js';
-import { TARGETING_KEYS } from '../src/constants.js';
-import { getHook } from '../src/hook.js';
+import {
+  getSignals as getSignalsFn,
+  getSegments as getSegmentsFn,
+  taxonomies,
+} from "../libraries/gptUtils/gptUtils.js";
+import { auctionManager } from "../src/auctionManager.js";
+import { config } from "../src/config.js";
+import { TARGETING_KEYS } from "../src/constants.js";
+import { getHook } from "../src/hook.js";
 import {
   deepAccess,
   deepSetValue,
   logInfo,
   logWarn,
   pick,
-  uniques
-} from '../src/utils.js';
+  uniques,
+} from "../src/utils.js";
 
-const MODULE_NAME = 'GPT Pre-Auction';
+const MODULE_NAME = "GPT Pre-Auction";
 export let _currentConfig = {};
 let hooksAdded = false;
 window.adpushup = window.adpushup || {};
@@ -23,18 +27,22 @@ window.adpTags = window.adpTags || {};
 const adpTags = window.adpTags;
 const adpSlots = adpTags.adpSlots || {};
 
-const getAdUnitPath = function(code) {
+const getAdUnitPath = function (code) {
   const adpSlot = adpSlots[code];
   if (!adpSlot) return null;
-  const {childPublisherId,isMcmEnabled=false } = adpConfig.mcm;
+  const { childPublisherId, isMcmEnabled = false } = adpConfig.mcm;
 
   let dfpNetwork = adpSlot.activeDFPNetwork;
   if (isMcmEnabled) {
     dfpNetwork += `,${childPublisherId}`;
   }
-  const dfpAdUnitCode = adpSlot.currentGptSlotData && adpSlot.currentGptSlotData.dfpAdunitCode;
+  const dfpAdUnitCode =
+    adpSlot.currentGptSlotData && adpSlot.currentGptSlotData.dfpAdunitCode;
+  if (!dfpAdUnitCode) {
+    return null;
+  }
   return `/${dfpNetwork}/${dfpAdUnitCode}`;
-}
+};
 export function getSegments(fpd, sections, segtax) {
   return getSegmentsFn(fpd, sections, segtax);
 }
@@ -43,11 +51,14 @@ export function getSignals(fpd) {
   return getSignalsFn(fpd);
 }
 
-export function getSignalsArrayByAuctionsIds(auctionIds, index = auctionManager.index) {
+export function getSignalsArrayByAuctionsIds(
+  auctionIds,
+  index = auctionManager.index
+) {
   const signals = auctionIds
-    .map(auctionId => index.getAuction({ auctionId })?.getFPD()?.global)
+    .map((auctionId) => index.getAuction({ auctionId })?.getFPD()?.global)
     .map(getSignals)
-    .filter(fpd => fpd);
+    .filter((fpd) => fpd);
 
   return signals;
 }
@@ -56,32 +67,36 @@ export function getSignalsIntersection(signals) {
   const result = {};
   taxonomies.forEach((taxonomy) => {
     const allValues = signals
-      .flatMap(x => x)
-      .filter(x => x.taxonomy === taxonomy)
-      .map(x => x.values);
-    result[taxonomy] = allValues.length ? (
-      allValues.reduce((commonElements, subArray) => {
-        return commonElements.filter(element => subArray.includes(element));
-      })
-    ) : []
+      .flatMap((x) => x)
+      .filter((x) => x.taxonomy === taxonomy)
+      .map((x) => x.values);
+    result[taxonomy] = allValues.length
+      ? allValues.reduce((commonElements, subArray) => {
+          return commonElements.filter((element) => subArray.includes(element));
+        })
+      : [];
     result[taxonomy] = { values: result[taxonomy] };
-  })
+  });
   return result;
 }
 
 export function getAuctionsIdsFromTargeting(targeting, am = auctionManager) {
   return Object.values(targeting)
-    .flatMap(x => Object.entries(x))
-    .filter((entry) => entry[0] === TARGETING_KEYS.AD_ID || entry[0].startsWith(TARGETING_KEYS.AD_ID + '_'))
-    .flatMap(entry => entry[1])
-    .map(adId => am.findBidByAdId(adId)?.auctionId)
-    .filter(id => id != null)
+    .flatMap((x) => Object.entries(x))
+    .filter(
+      (entry) =>
+        entry[0] === TARGETING_KEYS.AD_ID ||
+        entry[0].startsWith(TARGETING_KEYS.AD_ID + "_")
+    )
+    .flatMap((entry) => entry[1])
+    .map((adId) => am.findBidByAdId(adId)?.auctionId)
+    .filter((id) => id != null)
     .filter(uniques);
 }
 
-export const appendGptSlots = adUnits => {
+export const appendGptSlots = (adUnits) => {
   if (!adpSlots) {
-    return; 
+    return;
   }
 
   const adUnitMap = adUnits.reduce((acc, adUnit) => {
@@ -91,7 +106,9 @@ export const appendGptSlots = adUnits => {
   }, {});
 
   for (adUnit in adpSlots) {
-    const matchingAdUnitCode = Object.keys(adUnitMap).find((key) => key === adUnit);
+    const matchingAdUnitCode = Object.keys(adUnitMap).find(
+      (key) => key === adUnit
+    );
     if (matchingAdUnitCode) {
       const adserver = {
         name: "gam",
@@ -109,14 +126,14 @@ export const appendGptSlots = adUnits => {
 };
 
 const sanitizeSlotPath = (path) => {
-  const gptConfig = config.getConfig('gptPreAuction') || {};
+  const gptConfig = config.getConfig("gptPreAuction") || {};
 
   if (gptConfig.mcmEnabled) {
-    return path.replace(/(^\/\d*),\d*\//, '$1/');
+    return path.replace(/(^\/\d*),\d*\//, "$1/");
   }
 
   return path;
-}
+};
 
 const defaultPreAuction = (adUnit, adServerAdSlot) => {
   const context = adUnit.ortb2Imp.ext.data;
@@ -127,10 +144,12 @@ const defaultPreAuction = (adUnit, adServerAdSlot) => {
   }
 
   if (!adpSlots) {
-    return 
+    return;
   }
   // find all GPT slots with this name
-  var gptSlots = Object.keys(adpSlots).filter(slot => getAdUnitPath(slot) === adServerAdSlot);
+  var gptSlots = Object.keys(adpSlots).filter(
+    (slot) => getAdUnitPath(slot) === adServerAdSlot
+  );
 
   if (gptSlots.length === 0) {
     return; // should never happen
@@ -142,9 +161,9 @@ const defaultPreAuction = (adUnit, adServerAdSlot) => {
 
   // else the adunit code must be div id. append it.
   return `${adServerAdSlot}#${adUnit.code}`;
-}
+};
 
-export const appendPbAdSlot = adUnit => {
+export const appendPbAdSlot = (adUnit) => {
   const context = adUnit.ortb2Imp.ext.data;
   const { customPbAdSlot } = _currentConfig;
 
@@ -154,7 +173,10 @@ export const appendPbAdSlot = adUnit => {
   }
 
   if (customPbAdSlot) {
-    context.pbadslot = customPbAdSlot(adUnit.code, deepAccess(context, 'adserver.adslot'));
+    context.pbadslot = customPbAdSlot(
+      adUnit.code,
+      deepAccess(context, "adserver.adslot")
+    );
     return;
   }
 
@@ -167,7 +189,7 @@ export const appendPbAdSlot = adUnit => {
     }
   } catch (e) {}
   // banner adUnit, use GPT adunit if defined
-  if (deepAccess(context, 'adserver.adslot')) {
+  if (deepAccess(context, "adserver.adslot")) {
     context.pbadslot = context.adserver.adslot;
     return;
   }
@@ -176,13 +198,16 @@ export const appendPbAdSlot = adUnit => {
 };
 
 function warnDeprecation(adUnit) {
-  logWarn(`pbadslot is deprecated and will soon be removed, use gpid instead`, adUnit)
+  logWarn(
+    `pbadslot is deprecated and will soon be removed, use gpid instead`,
+    adUnit
+  );
 }
 
 export const makeBidRequestsHook = (fn, adUnits, ...args) => {
   appendGptSlots(adUnits);
   const { useDefaultPreAuction, customPreAuction } = _currentConfig;
-  adUnits.forEach(adUnit => {
+  adUnits.forEach((adUnit) => {
     // init the ortb2Imp if not done yet
     adUnit.ortb2Imp = adUnit.ortb2Imp || {};
     adUnit.ortb2Imp.ext = adUnit.ortb2Imp.ext || {};
@@ -200,10 +225,14 @@ export const makeBidRequestsHook = (fn, adUnits, ...args) => {
       if (context.data?.pbadslot) {
         warnDeprecation(adUnit);
       }
-      let adserverSlot = deepAccess(context, 'data.adserver.adslot');
+      let adserverSlot = deepAccess(context, "data.adserver.adslot");
       let result;
       if (customPreAuction) {
-        result = customPreAuction(adUnit, adserverSlot, adUnitPaths?.[adUnit.code]);
+        result = customPreAuction(
+          adUnit,
+          adserverSlot,
+          adUnitPaths?.[adUnit.code]
+        );
       } else if (useDefaultPreAuction) {
         result = defaultPreAuction(adUnit, adserverSlot);
       }
@@ -218,35 +247,48 @@ export const makeBidRequestsHook = (fn, adUnits, ...args) => {
 const setPpsConfigFromTargetingSet = (next, targetingSet) => {
   // set gpt config
   const auctionsIds = getAuctionsIdsFromTargeting(targetingSet);
-  const signals = getSignalsIntersection(getSignalsArrayByAuctionsIds(auctionsIds));
-  window.googletag.setConfig && window.googletag.setConfig({pps: { taxonomies: signals }});
+  const signals = getSignalsIntersection(
+    getSignalsArrayByAuctionsIds(auctionsIds)
+  );
+  window.googletag.setConfig &&
+    window.googletag.setConfig({ pps: { taxonomies: signals } });
   next(targetingSet);
 };
 
-const handleSetGptConfig = moduleConfig => {
+const handleSetGptConfig = (moduleConfig) => {
   _currentConfig = pick(moduleConfig, [
-    'enabled', enabled => enabled !== false,
-    'customGptSlotMatching', customGptSlotMatching =>
-      typeof customGptSlotMatching === 'function' && customGptSlotMatching,
-    'customPbAdSlot', customPbAdSlot => typeof customPbAdSlot === 'function' && customPbAdSlot,
-    'customPreAuction', customPreAuction => typeof customPreAuction === 'function' && customPreAuction,
-    'useDefaultPreAuction', useDefaultPreAuction => useDefaultPreAuction ?? true,
+    "enabled",
+    (enabled) => enabled !== false,
+    "customGptSlotMatching",
+    (customGptSlotMatching) =>
+      typeof customGptSlotMatching === "function" && customGptSlotMatching,
+    "customPbAdSlot",
+    (customPbAdSlot) => typeof customPbAdSlot === "function" && customPbAdSlot,
+    "customPreAuction",
+    (customPreAuction) =>
+      typeof customPreAuction === "function" && customPreAuction,
+    "useDefaultPreAuction",
+    (useDefaultPreAuction) => useDefaultPreAuction ?? true,
   ]);
 
   if (_currentConfig.enabled) {
     if (!hooksAdded) {
-      getHook('makeBidRequests').before(makeBidRequestsHook);
-      getHook('targetingDone').after(setPpsConfigFromTargetingSet)
+      getHook("makeBidRequests").before(makeBidRequestsHook);
+      getHook("targetingDone").after(setPpsConfigFromTargetingSet);
       hooksAdded = true;
     }
   } else {
     logInfo(`${MODULE_NAME}: Turning off module`);
     _currentConfig = {};
-    getHook('makeBidRequests').getHooks({hook: makeBidRequestsHook}).remove();
-    getHook('targetingDone').getHooks({hook: setPpsConfigFromTargetingSet}).remove();
+    getHook("makeBidRequests").getHooks({ hook: makeBidRequestsHook }).remove();
+    getHook("targetingDone")
+      .getHooks({ hook: setPpsConfigFromTargetingSet })
+      .remove();
     hooksAdded = false;
   }
 };
 
-config.getConfig('gptPreAuction', config => handleSetGptConfig(config.gptPreAuction));
+config.getConfig("gptPreAuction", (config) =>
+  handleSetGptConfig(config.gptPreAuction)
+);
 handleSetGptConfig({});
